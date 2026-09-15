@@ -20,7 +20,8 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   const [cards, setCards] = useState([]);
   const [newColumnName, setNewColumnName] = useState('');
 
-  const isViewer = activeBoard?.role === 'viewer';
+  const isViewer = !activeBoard?.isOwner && (activeBoard?.userRole === 'Viewer' || activeBoard?.role === 'viewer');
+
   const [isPresenting, setIsPresenting] = useState(false);
   const [isEditingBoardTitle, setIsEditingBoardTitle] = useState(false);
   const [boardTitleInput, setBoardTitleInput] = useState('');
@@ -33,53 +34,41 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   const [modalCard, setModalCard] = useState(null);
   const [modalColId, setModalColId] = useState(null);
 
+  // Stati Drag & Drop con target visuale
   const [draggedCard, setDraggedCard] = useState(null);
   const [draggedColIndex, setDraggedColIndex] = useState(null);
   const [dragOverCardColId, setDragOverCardColId] = useState(null);
   const [dragOverCardId, setDragOverCardId] = useState(null);
 
   useEffect(() => {
-    if (!activeBoard) return;
-
+    if (!activeBoard?.id) return;
     fetchBoardData();
-
-    const channel = supabase
-      .channel(`board-realtime-${activeBoard.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'columns' }, () => fetchBoardData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cards' }, () => fetchBoardData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, [activeBoard]);
 
   const fetchBoardData = async () => {
     try {
-      const { data: cols, error: colErr } = await supabase
+      const { data: cols } = await supabase
         .from('columns')
         .select('*')
         .eq('board_id', activeBoard.id)
         .order('position', { ascending: true });
 
-      if (colErr) throw colErr;
       setColumns(cols || []);
 
       if (cols && cols.length > 0) {
         const colIds = cols.map((c) => String(c.id));
-        const { data: crds, error: cardErr } = await supabase
+        const { data: crds } = await supabase
           .from('cards')
           .select('*, attachments(*)')
           .in('column_id', colIds)
           .order('position', { ascending: true });
 
-        if (cardErr) throw cardErr;
         setCards(crds || []);
       } else {
         setCards([]);
       }
     } catch (err) {
-      console.error('Errore recupero dati bacheca:', err.message);
+      console.error('Errore dati bacheca:', err);
     }
   };
 
@@ -92,7 +81,6 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     try {
       setIsEditingBoardTitle(false);
       if (onBoardTitleChange) onBoardTitleChange(newTitle);
-
       await supabase.from('boards').update({ title: newTitle }).eq('id', activeBoard.id);
     } catch (err) {
       console.error('Errore rinomina bacheca:', err);
@@ -142,26 +130,23 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
       setOpenColMenuId(null);
       await supabase.from('columns').update({ color: newColor }).eq('id', columnId);
     } catch (err) {
-      console.error('Errore aggiornamento colore:', err);
+      console.error('Errore cambio colore:', err);
     }
   };
 
   const handleDeleteColumn = async (columnId) => {
     if (!columnId) return;
-    if (!window.confirm("Sei sicuro di voler eliminare questa colonna e le sue schede?")) return;
+    if (!window.confirm("Attenzione: vuoi eliminare questa colonna e tutte le schede contenute?")) return;
 
     try {
       const colIdStr = String(columnId);
       await supabase.from('cards').delete().eq('column_id', colIdStr);
       await supabase.from('columns').delete().eq('id', colIdStr);
       setColumns((prev) => prev.filter((c) => String(c.id) !== colIdStr));
+      setOpenColMenuId(null);
     } catch (err) {
       alert('Errore eliminazione colonna: ' + err.message);
     }
-  };
-
-  const handleSaveCardFromModal = async () => {
-    await fetchBoardData();
   };
 
   const handleDeleteCard = async (cardId) => {
@@ -174,8 +159,8 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     }
   };
 
+  // --- DRAG SCHEDE CON VISUAL PLACEHOLDER ---
   const handleCardDragStart = (e, card) => {
-    console.log("🚀 DRAG START SCHEDA:", card.title);
     if (isViewer) return;
     e.stopPropagation();
     setDraggedCard(card);
@@ -211,23 +196,34 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
 
     const otherCards = cards.filter((c) => String(c.column_id) !== targetColIdStr && c.id !== draggedCard.id);
     let targetColCards = cards.filter((c) => String(c.column_id) === targetColIdStr && c.id !== draggedCard.id);
+
     const updatedDraggedCard = { ...draggedCard, column_id: targetColIdStr };
 
     if (dragOverCardId) {
       const dropIndex = targetColCards.findIndex((c) => c.id === dragOverCardId);
-      if (dropIndex !== -1) targetColCards.splice(dropIndex, 0, updatedDraggedCard);
-      else targetColCards.push(updatedDraggedCard);
+      if (dropIndex !== -1) {
+        targetColCards.splice(dropIndex, 0, updatedDraggedCard);
+      } else {
+        targetColCards.push(updatedDraggedCard);
+      }
     } else {
       targetColCards.push(updatedDraggedCard);
     }
 
-    const reorderedTargetCards = targetColCards.map((card, idx) => ({ ...card, position: idx }));
+    const reorderedTargetCards = targetColCards.map((card, idx) => ({
+      ...card,
+      position: idx
+    }));
+
     setCards([...otherCards, ...reorderedTargetCards]);
     handleCardDragEnd();
 
     try {
       const updates = reorderedTargetCards.map((card) =>
-        supabase.from('cards').update({ column_id: card.column_id, position: card.position }).eq('id', card.id)
+        supabase
+          .from('cards')
+          .update({ column_id: card.column_id, position: card.position })
+          .eq('id', card.id)
       );
       await Promise.all(updates);
     } catch (err) {
@@ -236,16 +232,15 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     }
   };
 
+  // --- DRAG COLONNE ---
   const handleColDragStart = (e, index) => {
-    if (isViewer) return;
+    if (isViewer || draggedCard) return;
     setDraggedColIndex(index);
-    setDraggedCard(null);
   };
 
   const handleColDragOver = (e, index) => {
-    if (isViewer || draggedCard) return;
+    if (isViewer || draggedCard || draggedColIndex === null || draggedColIndex === index) return;
     e.preventDefault();
-    if (draggedColIndex === null || draggedColIndex === index) return;
 
     const reordered = [...columns];
     const [movedCol] = reordered.splice(draggedColIndex, 1);
@@ -256,7 +251,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   };
 
   const handleColDragEnd = async () => {
-    if (isViewer || draggedColIndex === null) return;
+    if (draggedColIndex === null) return;
     setDraggedColIndex(null);
 
     try {
@@ -264,35 +259,51 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
         await supabase.from('columns').update({ position: i }).eq('id', columns[i].id);
       }
     } catch (err) {
-      console.error('Errore salvataggio colonne:', err);
+      console.error('Errore ordine colonne:', err);
     }
   };
 
   return (
-    <div className="p-4">
-      {/* BOX TEST DRAG */}
-      <div
-        draggable={true}
-        onDragStart={() => console.log('✅ TEST DRAG START BOX GIALLO FUNZIONA!')}
-        className="p-3 bg-yellow-300 text-slate-900 font-bold mb-4 rounded-xl text-center cursor-move shadow"
-      >
-        🟡 TEST DRAG: Trascina questo box per verificare la console (F12)
-      </div>
-
+    <div 
+      className="p-4 font-sans"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleCardDragEnd}
+      onClick={() => {
+        setOpenColMenuId(null);
+        setActiveColorPickerColId(null);
+      }}
+    >
       {/* BARRA SUPERIORE */}
       <div className="flex justify-between items-center mb-5 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-4">
-          <div onClick={onBack} className="w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center text-white font-black cursor-pointer">
+          <div onClick={onBack} className="w-10 h-10 bg-slate-900 text-white font-black rounded-xl flex items-center justify-center cursor-pointer shadow">
             DS
           </div>
           <div>
-            <h1 className="text-lg font-extrabold text-slate-900">{activeBoard?.title}</h1>
-            <p className="text-xs text-slate-500">Utente: {currentUser?.email}</p>
+            {!isEditingBoardTitle ? (
+              <h1 
+                onClick={() => !isViewer && activeBoard?.isOwner && setIsEditingBoardTitle(true)}
+                className={`text-lg font-black text-slate-900 ${!isViewer && activeBoard?.isOwner ? 'cursor-pointer hover:text-blue-600' : ''}`}
+              >
+                {activeBoard?.title} {!isViewer && activeBoard?.isOwner && '✏️'}
+              </h1>
+            ) : (
+              <input
+                type="text"
+                value={boardTitleInput}
+                onChange={(e) => setBoardTitleInput(e.target.value)}
+                onBlur={handleSaveBoardTitle}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveBoardTitle()}
+                autoFocus
+                className="border border-blue-500 rounded px-2 py-0.5 text-base font-extrabold text-slate-900"
+              />
+            )}
+            <p className="text-xs text-slate-500 font-medium">Utente: {currentUser?.email}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={onBack} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-1.5 rounded-lg font-bold text-xs">
+          <button onClick={onBack} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg font-bold text-xs">
             ← Dashboard
           </button>
           {activeBoard?.isOwner && (
@@ -300,10 +311,10 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
               Condividi
             </button>
           )}
-          <button onClick={() => setIsPresenting(true)} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg">
+          <button onClick={() => setIsPresenting(true)} className="bg-slate-900 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg">
             ▶️ Presenta
           </button>
-          <button onClick={() => exportBoardToWord(activeBoard?.title, columns, cards)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-1.5 rounded-lg font-bold text-xs">
+          <button onClick={() => exportBoardToWord(activeBoard?.title || 'Bacheca', columns, cards)} className="bg-slate-100 text-slate-700 px-3.5 py-1.5 rounded-lg font-bold text-xs">
             📝 Word
           </button>
           <button onClick={onLogout} className="bg-slate-100 hover:bg-red-50 text-slate-600 px-3.5 py-1.5 rounded-lg text-xs font-semibold">
@@ -312,61 +323,231 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
         </div>
       </div>
 
-      {/* AREA COLONNE */}
+      {/* AREA COLONNE KANBAN */}
       <div className="flex gap-4 overflow-x-auto pb-6 items-start">
         {columns.map((col, colIdx) => {
           const colCards = cards.filter((c) => String(c.column_id) === String(col.id));
           const isTargetCardCol = dragOverCardColId === col.id;
-          const colBgColor = col.color || 'bg-blue-600';
+          const isMenuOpen = openColMenuId === col.id;
+          const isPickerOpen = activeColorPickerColId === col.id;
+          const isEditingThisCol = editingColId === col.id;
 
           return (
             <div
               key={col.id}
-              draggable={!isViewer && !draggedCard}
+              draggable={!isViewer && !draggedCard && !isEditingThisCol}
               onDragStart={(e) => handleColDragStart(e, colIdx)}
               onDragOver={(e) => {
                 e.preventDefault();
                 if (draggedCard) setDragOverCardColId(col.id);
                 else handleColDragOver(e, colIdx);
               }}
-              onDrop={(e) => {
-                if (draggedCard) handleCardDrop(e, col.id);
-              }}
               onDragEnd={handleColDragEnd}
-              className={`w-72 border rounded-2xl overflow-hidden flex-shrink-0 bg-slate-200/70 border-slate-300 ${isTargetCardCol ? 'bg-blue-100 border-blue-500' : ''
-                }`}
+              onDrop={(e) => handleCardDrop(e, col.id)}
+              className={`w-72 bg-slate-200/70 border rounded-2xl overflow-hidden flex-shrink-0 shadow-sm transition ${
+                isTargetCardCol ? 'border-blue-500 ring-2 ring-blue-300 bg-blue-50/30' : 'border-slate-300'
+              }`}
             >
               {/* HEADER COLONNA */}
-              <div className={`p-3 flex justify-between items-center text-white ${colBgColor}`}>
-                <h3 className="font-bold text-base truncate">{col.name}</h3>
-                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">{colCards.length}</span>
-              </div>
-
-              {/* SCHEDE DELLA COLONNA */}
-              <div className="p-2.5 min-h-[120px]">
-                <div className="space-y-2.5 mb-2">
-                  {colCards.map((card) => (
-                    <div
-                      key={card.id}
-                      draggable={true}
-                      onDragStart={(e) => handleCardDragStart(e, card)}
-                      onDragOver={(e) => handleCardDragOverCard(e, card)}
-                      onDragEnd={handleCardDragEnd}
-                      onClick={() => {
-                        setModalCard(card);
-                        setModalColId(col.id);
+              <div className={`p-3 font-bold text-white flex justify-between items-center relative ${col.color || 'bg-blue-600'} ${!isViewer && !isEditingThisCol ? 'cursor-grab active:cursor-grabbing' : ''}`}>
+                {!isEditingThisCol ? (
+                  <h3 className="font-bold text-base flex items-center gap-1.5 flex-1 pr-2 truncate">
+                    {!isViewer && <span className="opacity-60 text-xs">⋮⋮</span>}
+                    <span 
+                      onClick={(e) => {
+                        if (!isViewer) {
+                          e.stopPropagation();
+                          setEditingColId(col.id);
+                          setEditingColName(col.name);
+                        }
                       }}
-                      className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm hover:border-blue-400 transition cursor-grab active:cursor-grabbing"
+                      className={!isViewer ? 'cursor-pointer hover:underline' : ''}
                     >
-                      <h4 className="font-bold text-slate-900 text-sm mb-1">{card.title}</h4>
-                      {card.description && (
-                        <div className="text-xs text-slate-600 line-clamp-2">
-                          <ReactMarkdown>{card.description}</ReactMarkdown>
+                      {col.name}
+                    </span>
+                  </h3>
+                ) : (
+                  <input
+                    type="text"
+                    value={editingColName}
+                    onChange={(e) => setEditingColName(e.target.value)}
+                    onBlur={() => handleRenameColumn(col.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleRenameColumn(col.id)}
+                    autoFocus
+                    className="w-full bg-white text-slate-900 font-bold text-sm px-2 py-1 rounded focus:outline-none"
+                  />
+                )}
+
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className="text-xs bg-white/20 text-white font-bold px-2 py-0.5 rounded-full">
+                    {colCards.length}
+                  </span>
+
+                  {!isViewer && (
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenColMenuId(isMenuOpen ? null : col.id);
+                          setActiveColorPickerColId(null);
+                        }}
+                        className="w-6 h-6 flex items-center justify-center text-white/90 hover:text-white hover:bg-white/20 rounded-full transition font-bold text-sm leading-none"
+                      >
+                        ⋮
+                      </button>
+
+                      {isMenuOpen && (
+                        <div 
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl p-1.5 shadow-xl z-30 w-36 text-xs text-slate-800 space-y-0.5"
+                        >
+                          <button
+                            onClick={() => {
+                              setEditingColId(col.id);
+                              setEditingColName(col.name);
+                              setOpenColMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-1.5 hover:bg-slate-100 rounded-lg font-semibold flex items-center gap-2"
+                          >
+                            ✏️ Rinomina
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setActiveColorPickerColId(isPickerOpen ? null : col.id);
+                              setOpenColMenuId(null);
+                            }}
+                            className="w-full text-left px-3 py-1.5 hover:bg-slate-100 rounded-lg font-semibold flex items-center gap-2"
+                          >
+                            🎨 Cambia colore
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteColumn(col.id)}
+                            className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 font-semibold rounded-lg flex items-center gap-2 border-t border-slate-100 mt-1 pt-1"
+                          >
+                            🗑️ Elimina
+                          </button>
+                        </div>
+                      )}
+
+                      {isPickerOpen && (
+                        <div 
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl p-2 shadow-xl z-30 flex gap-1.5"
+                        >
+                          {availableColors.map((c) => (
+                            <button
+                              key={c.value}
+                              onClick={() => handleChangeColumnColor(col.id, c.value)}
+                              className={`w-5 h-5 rounded-full border border-black/10 transition hover:scale-110 ${c.value}`}
+                              title={c.label}
+                            />
+                          ))}
                         </div>
                       )}
                     </div>
-                  ))}
+                  )}
                 </div>
+              </div>
+
+              {/* SCHEDE DELLA COLONNA CON PLACEHOLDER */}
+              <div 
+                className="p-2.5 space-y-2.5 min-h-[120px]"
+                onDragOver={(e) => {
+                  if (draggedCard) {
+                    e.preventDefault();
+                    setDragOverCardColId(col.id);
+                  }
+                }}
+              >
+                {colCards.map((card) => {
+                  const isBeingDragged = draggedCard?.id === card.id;
+                  const isDragOverThisCard = dragOverCardId === card.id && draggedCard?.id !== card.id;
+
+                  return (
+                    <React.Fragment key={card.id}>
+                      {/* PLACEHOLDER "RILASCIA QUI" SOPRA LA SCHEDA TARGET */}
+                      {isDragOverThisCard && (
+                        <div className="border-2 border-dashed border-blue-500 bg-blue-50/90 rounded-xl p-3 text-center text-blue-600 text-xs font-bold shadow-inner flex items-center justify-center gap-1">
+                          📍 Rilascia qui
+                        </div>
+                      )}
+
+                      <div
+                        draggable={!isViewer}
+                        onDragStart={(e) => handleCardDragStart(e, card)}
+                        onDragOver={(e) => handleCardDragOverCard(e, card)}
+                        onDragEnd={handleCardDragEnd}
+                        onClick={() => {
+                          setModalCard(card);
+                          setModalColId(col.id);
+                        }}
+                        className={`bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm hover:border-blue-400 cursor-grab active:cursor-grabbing transition relative ${
+                          isBeingDragged ? 'opacity-30 border-dashed border-blue-500 scale-95' : ''
+                        }`}
+                      >
+                        <div className="flex justify-between items-start gap-2 mb-1">
+                          <h4 className="font-bold text-slate-900 text-sm">{card.title || 'Senza titolo'}</h4>
+                          {!isViewer && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm('Eliminare questa scheda?')) handleDeleteCard(card.id);
+                              }}
+                              className="text-slate-400 hover:text-red-500 text-xs"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+
+                        {card.description && (
+                          <div className="text-xs text-slate-600 line-clamp-2 mb-1">
+                            <ReactMarkdown>{card.description}</ReactMarkdown>
+                          </div>
+                        )}
+
+                        {card.attachments && card.attachments.length > 0 && (
+                          <div className="mt-2 pt-1 border-t border-slate-100 space-y-1">
+                            {card.attachments.map((att) => (
+                              <a
+                                key={att.id}
+                                href={att.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1 truncate"
+                              >
+                                📎 {att.file_name}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+
+                {/* PLACEHOLDER "RILASCIA QUI IN FONDO" */}
+                {isTargetCardCol && draggedCard && (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDragOverCardColId(col.id);
+                      setDragOverCardId(null);
+                    }}
+                    className={`border-2 border-dashed rounded-xl p-3 text-center text-xs font-bold transition-all my-1 flex items-center justify-center gap-1 ${
+                      !dragOverCardId
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-inner scale-[1.01]'
+                        : 'border-slate-300 text-slate-400 opacity-60'
+                    }`}
+                  >
+                    📍 Rilascia qui in fondo
+                  </div>
+                )}
 
                 {!isViewer && (
                   <button
@@ -374,7 +555,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                       setModalColId(col.id);
                       setModalCard({ id: null, title: '', description: '', position: colCards.length });
                     }}
-                    className="w-full py-2 rounded-lg border-2 border-dashed border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                    className="w-full py-2 rounded-xl border-2 border-dashed border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition mt-1"
                   >
                     + Aggiungi scheda
                   </button>
@@ -388,20 +569,20 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
           <div className="w-72 bg-white border-2 border-dashed border-slate-300 rounded-2xl p-3 flex-shrink-0">
             <input
               type="text"
-              placeholder="Nome colonna..."
+              placeholder="Nome nuova colonna..."
               value={newColumnName}
               onChange={(e) => setNewColumnName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
-              className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs mb-2"
+              className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs mb-2 focus:outline-none"
             />
-            <button onClick={handleAddColumn} className="w-full bg-slate-800 text-white py-1.5 rounded-lg text-xs font-bold">
+            <button onClick={handleAddColumn} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-1.5 rounded-lg text-xs font-bold transition">
               + Aggiungi Colonna
             </button>
           </div>
         )}
       </div>
 
-      {/* MODALE SCHEDA */}
+      {/* MODALI */}
       {(modalCard !== null || modalColId !== null) && (
         <CardDetailModal
           card={modalCard}
@@ -412,12 +593,11 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
             setModalCard(null);
             setModalColId(null);
           }}
-          onSaveCard={handleSaveCardFromModal}
+          onSaveCard={() => fetchBoardData()}
           onDeleteCard={handleDeleteCard}
         />
       )}
 
-      {/* MODALE PRESENTAZIONE */}
       {isPresenting && (
         <PresentationModal
           cards={cards}

@@ -26,17 +26,19 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [draggedBoardIndex, setDraggedBoardIndex] = useState<number | null>(null);
     const navigate = useNavigate();
 
     const fetchBoards = async () => {
         if (!currentUser) return;
         setLoading(true);
         try {
-            // 1. Mie bacheche
+            // 1. Mie bacheche ordina per posizione se presente, altrimenti per data
             const { data: ownData, error: ownErr } = await supabase
                 .from('boards')
                 .select('*')
                 .eq('user_id', currentUser.id)
+                .order('position', { ascending: true })
                 .order('created_at', { ascending: false });
 
             if (ownErr) throw ownErr;
@@ -72,17 +74,53 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
         fetchBoards();
     }, [currentUser]);
 
+    // Gestione Drag & Drop Bacheche
+    const handleBoardDragStart = (e: React.DragEvent, index: number) => {
+        setDraggedBoardIndex(index);
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleBoardDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleBoardDrop = async (e: React.DragEvent, targetIndex: number) => {
+        e.preventDefault();
+        if (draggedBoardIndex === null || draggedBoardIndex === targetIndex) return;
+
+        const updatedBoards = [...boards];
+        const [movedBoard] = updatedBoards.splice(draggedBoardIndex, 1);
+        updatedBoards.splice(targetIndex, 0, movedBoard);
+
+        setBoards(updatedBoards);
+        setDraggedBoardIndex(null);
+
+        // Salvataggio posizioni su Supabase
+        try {
+            const updates = updatedBoards.map((board, idx) =>
+                supabase
+                    .from('boards')
+                    .update({ position: idx })
+                    .eq('id', board.id)
+            );
+            await Promise.all(updates);
+        } catch (err: any) {
+            console.error('Errore salvataggio posizione bacheca:', err.message);
+        }
+    };
+
     const handleCreateBoard = async (title: string, templateObj: any) => {
         try {
             const newBoardId = crypto.randomUUID();
 
-            // 1. Inserisci la bacheca prendendo icona dal modello passato dal modale
             const newBoard = {
                 id: newBoardId,
                 title: title.trim(),
                 icon: templateObj?.icon || '📘',
                 user_id: currentUser.id,
-                owner_email: currentUser.email, // <--- Aggiungi questa riga
+                owner_email: currentUser.email,
+                position: boards.length,
             };
 
             const { data: createdBoard, error: boardError } = await supabase
@@ -93,7 +131,6 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
 
             if (boardError) throw boardError;
 
-            // 2. Se il modello passato ha colonne, inseriscile su Supabase
             if (templateObj?.columns && templateObj.columns.length > 0) {
                 const columnsToInsert = templateObj.columns.map((col: any, index: number) => ({
                     id: `col-${Date.now()}-${index}`,
@@ -113,7 +150,6 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
                 }
             }
 
-            // 3. Aggiorna lo stato e apri la bacheca
             setBoards([createdBoard, ...boards]);
             setIsCreateModalOpen(false);
             setActiveBoard({ ...createdBoard, isOwner: true, ownerEmail: currentUser.email });
@@ -235,14 +271,22 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
                                             ownerEmail: currentUser?.email,
                                         };
                                         return (
-                                            <BoardCard
+                                            <div
                                                 key={board.id}
-                                                board={boardData}
-                                                index={index}
-                                                onSelect={() => setActiveBoard(boardData)}
-                                                onDelete={() => handleDeleteBoard(board.id)}
-                                                onUpdateBoard={handleUpdateBoard}
-                                            />
+                                                draggable={true}
+                                                onDragStart={(e) => handleBoardDragStart(e, index)}
+                                                onDragOver={handleBoardDragOver}
+                                                onDrop={(e) => handleBoardDrop(e, index)}
+                                                className="cursor-grab active:cursor-grabbing transition-transform"
+                                            >
+                                                <BoardCard
+                                                    board={boardData}
+                                                    index={index}
+                                                    onSelect={() => setActiveBoard(boardData)}
+                                                    onDelete={() => handleDeleteBoard(board.id)}
+                                                    onUpdateBoard={handleUpdateBoard}
+                                                />
+                                            </div>
                                         );
                                     })}
                                 </div>
