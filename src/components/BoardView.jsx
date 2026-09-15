@@ -72,12 +72,22 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     }
   };
 
+  // --- SALVATAGGIO TITOLO BACHECA ---
   const handleSaveBoardTitle = async () => {
-    if (isViewer || !boardTitleInput.trim()) {
+    if (isViewer) {
       setIsEditingBoardTitle(false);
       return;
     }
+
     const newTitle = boardTitleInput.trim();
+
+    // Se l'input è vuoto o invariato, ripristina e chiudi
+    if (!newTitle) {
+      setBoardTitleInput(activeBoard?.title || '');
+      setIsEditingBoardTitle(false);
+      return;
+    }
+
     try {
       setIsEditingBoardTitle(false);
       if (onBoardTitleChange) onBoardTitleChange(newTitle);
@@ -159,7 +169,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     }
   };
 
-  // --- DRAG SCHEDE CON VISUAL PLACEHOLDER ---
+  // --- DRAG SCHEDE ---
   const handleCardDragStart = (e, card) => {
     if (isViewer) return;
     e.stopPropagation();
@@ -264,7 +274,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   };
 
   return (
-    <div 
+    <div
       className="p-4 font-sans"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleCardDragEnd}
@@ -280,12 +290,22 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
             DS
           </div>
           <div>
+            {/* EDIT TITOLO BACHECA */}
             {!isEditingBoardTitle ? (
-              <h1 
-                onClick={() => !isViewer && activeBoard?.isOwner && setIsEditingBoardTitle(true)}
-                className={`text-lg font-black text-slate-900 ${!isViewer && activeBoard?.isOwner ? 'cursor-pointer hover:text-blue-600' : ''}`}
+              <h1
+                onClick={() => {
+                  if (!isViewer && activeBoard?.isOwner) {
+                    setBoardTitleInput(activeBoard?.title || '');
+                    setIsEditingBoardTitle(true);
+                  }
+                }}
+                className={`text-lg font-black text-slate-900 flex items-center gap-2 ${
+                  !isViewer && activeBoard?.isOwner ? 'cursor-pointer hover:text-blue-600' : ''
+                }`}
+                title={!isViewer && activeBoard?.isOwner ? 'Clicca per rinominare' : ''}
               >
-                {activeBoard?.title} {!isViewer && activeBoard?.isOwner && '✏️'}
+                <span>{activeBoard?.title}</span>
+                {!isViewer && activeBoard?.isOwner && <span className="text-xs text-slate-400">✏️</span>}
               </h1>
             ) : (
               <input
@@ -293,12 +313,35 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                 value={boardTitleInput}
                 onChange={(e) => setBoardTitleInput(e.target.value)}
                 onBlur={handleSaveBoardTitle}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveBoardTitle()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveBoardTitle();
+                  if (e.key === 'Escape') {
+                    setBoardTitleInput(activeBoard?.title || '');
+                    setIsEditingBoardTitle(false);
+                  }
+                }}
                 autoFocus
-                className="border border-blue-500 rounded px-2 py-0.5 text-base font-extrabold text-slate-900"
+                className="border border-blue-500 rounded px-2 py-0.5 text-base font-extrabold text-slate-900 focus:outline-none"
               />
             )}
-            <p className="text-xs text-slate-500 font-medium">Utente: {currentUser?.email}</p>
+
+            {/* SUBTITLE CON CONDIFIONALE PER PROPRIETARIO */}
+            <p className="text-xs text-slate-500 font-medium flex items-center gap-2 mt-0.5">
+              <span>Utente: {currentUser?.email}</span>
+              {!activeBoard?.isOwner && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span className="font-semibold text-slate-700">
+                    Proprietario: {activeBoard?.ownerEmail || 'Sconosciuto'}
+                  </span>
+                </>
+              )}
+              {isViewer && (
+                <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-300 font-bold ml-1">
+                  👁️ Sola Lettura
+                </span>
+              )}
+            </p>
           </div>
         </div>
 
@@ -353,7 +396,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                 {!isEditingThisCol ? (
                   <h3 className="font-bold text-base flex items-center gap-1.5 flex-1 pr-2 truncate">
                     {!isViewer && <span className="opacity-60 text-xs">⋮⋮</span>}
-                    <span 
+                    <span
                       onClick={(e) => {
                         if (!isViewer) {
                           e.stopPropagation();
@@ -397,7 +440,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                       </button>
 
                       {isMenuOpen && (
-                        <div 
+                        <div
                           onClick={(e) => e.stopPropagation()}
                           className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl p-1.5 shadow-xl z-30 w-36 text-xs text-slate-800 space-y-0.5"
                         >
@@ -432,7 +475,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                       )}
 
                       {isPickerOpen && (
-                        <div 
+                        <div
                           onClick={(e) => e.stopPropagation()}
                           className="absolute right-0 top-8 bg-white border border-slate-200 rounded-xl p-2 shadow-xl z-30 flex gap-1.5"
                         >
@@ -452,7 +495,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
               </div>
 
               {/* SCHEDE DELLA COLONNA CON PLACEHOLDER */}
-              <div 
+              <div
                 className="p-2.5 space-y-2.5 min-h-[120px]"
                 onDragOver={(e) => {
                   if (draggedCard) {
@@ -467,7 +510,6 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
 
                   return (
                     <React.Fragment key={card.id}>
-                      {/* PLACEHOLDER "RILASCIA QUI" SOPRA LA SCHEDA TARGET */}
                       {isDragOverThisCard && (
                         <div className="border-2 border-dashed border-blue-500 bg-blue-50/90 rounded-xl p-3 text-center text-blue-600 text-xs font-bold shadow-inner flex items-center justify-center gap-1">
                           📍 Rilascia qui
