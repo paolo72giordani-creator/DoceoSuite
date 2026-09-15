@@ -77,11 +77,12 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
 
       // 1. Inserisci la bacheca prendendo icona dal modello passato dal modale
       const newBoard = {
-        id: newBoardId,
-        title: title.trim(),
-        icon: templateObj?.icon || '📘',
-        user_id: currentUser.id,
-      };
+  id: newBoardId,
+  title: title.trim(),
+  icon: templateObj?.icon || '📘',
+  user_id: currentUser.id,
+  owner_email: currentUser.email, // <--- Aggiungi questa riga
+};
 
       const { data: createdBoard, error: boardError } = await supabase
         .from('boards')
