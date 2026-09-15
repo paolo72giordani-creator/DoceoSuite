@@ -45,7 +45,7 @@ export default function SuiteHub({ currentUser, onLogout }: SuiteHubProps) {
       <header className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-slate-900 text-white font-black text-xl rounded-xl flex items-center justify-center shadow-md">
-            D
+            DS
           </div>
           <div>
             <h1 className="text-lg font-black text-slate-900 leading-tight">Doceo Suite</h1>

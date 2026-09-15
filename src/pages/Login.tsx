@@ -35,7 +35,7 @@ export default function Login() {
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-slate-900 text-white font-black text-2xl rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md">
-            D
+            DS
           </div>
           <h1 className="text-2xl font-black text-slate-900">Doceo Suite</h1>
           <p className="text-xs font-semibold text-slate-500 mt-1">
