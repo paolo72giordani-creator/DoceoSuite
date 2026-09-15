@@ -43,21 +43,22 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
 
       // 2. Bacheche condivise con me
       const { data: sharedData, error: sharedErr } = await supabase
-        .from('board_members')
-        .select('role, boards(*, owner_email)')
-        .eq('invited_email', currentUser.email?.toLowerCase());
+  .from('board_members')
+  .select('role, boards:boards_with_owners(*)')
+  .eq('invited_email', currentUser.email?.toLowerCase());
 
       if (sharedErr) console.error('Errore recupero condivise:', sharedErr);
 
       setBoards(ownData || []);
 
       const formattedShared = (sharedData || [])
-        .filter((item: any) => item.boards)
-        .map((item: any) => ({
-          ...item.boards,
-          userRole: item.role === 'editor' ? 'Editor' : 'Viewer',
-          isShared: true,
-        }));
+  .filter((item: any) => item.boards)
+  .map((item: any) => ({
+    ...item.boards,
+    userRole: item.role === 'editor' ? 'Editor' : 'Viewer',
+    isShared: true,
+    ownerEmail: item.boards.owner_email || item.boards.email || item.boards.user_email || 'Condivisa',
+  }));
 
       setSharedBoards(formattedShared);
     } catch (err) {
