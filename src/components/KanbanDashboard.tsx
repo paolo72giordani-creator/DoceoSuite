@@ -229,8 +229,10 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
                                     {boards.map((board, index) => {
                                         const boardData = {
                                             ...board,
+                                            id: board.id || board.board_id,
                                             isOwner: true,
-                                            ownerEmail: currentUser?.email || 'Tu', // Mostra la tua email o "Tu"
+                                            role: 'owner',
+                                            ownerEmail: currentUser?.email,
                                         };
                                         return (
                                             <BoardCard
@@ -259,8 +261,10 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
                                         {sharedBoards.map((board, index) => {
                                             const boardData = {
                                                 ...board,
+                                                id: board.id || board.board_id,
                                                 isOwner: false,
-                                                ownerEmail: board.owner_email || board.ownerEmail || board.created_by_email || 'Proprietario',
+                                                role: board.userRole === 'Viewer' ? 'viewer' : 'editor',
+                                                ownerEmail: board.owner_email || board.ownerEmail || 'Proprietario',
                                             };
                                             return (
                                                 <BoardCard
