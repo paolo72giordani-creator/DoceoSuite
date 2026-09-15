@@ -44,7 +44,7 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
       // 2. Bacheche condivise con me
       const { data: sharedData, error: sharedErr } = await supabase
         .from('board_members')
-        .select('role, boards(*)')
+        .select('role, boards(*, owner_email)')
         .eq('invited_email', currentUser.email?.toLowerCase());
 
       if (sharedErr) console.error('Errore recupero condivise:', sharedErr);
@@ -225,11 +225,11 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
                   </button>
 
                   {boards.map((board, index) => {
-                    const boardData = {
-                      ...board,
-                      isOwner: true,
-                      ownerEmail: currentUser.email,
-                    };
+                   const boardData = {
+                        ...board,
+                        isOwner: false,
+                        ownerEmail: board.owner_email || board.created_by_email || board.user_email || 'Condivisa',
+                      };
                     return (
                       <BoardCard
                         key={board.id}
