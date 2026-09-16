@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../../../shared/services/supabaseClient';
 import { BOARD_TEMPLATES } from '../data/templates';
 
 // @ts-ignore
 import BoardView from './BoardView';
 // @ts-ignore
-import Header from './Header';
+import Header from "../../../shared/components/Header";
 // @ts-ignore
 import BoardCard from './BoardCard';
 // @ts-ignore

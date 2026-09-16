@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../../../shared/services/supabaseClient';
 import ReactMarkdown from 'react-markdown'; // Importa ReactMarkdown
 
 export default function CardDetailModal({
@@ -205,6 +205,7 @@ export default function CardDetailModal({
         attachments: [...attachments, ...newlyUploadedAttachments]
       };
 
+      // ✅ 1. Notifica il componente padre e chiudi il modal
       if (onSaveCard) {
         onSaveCard(completeCard, isNew);
       }

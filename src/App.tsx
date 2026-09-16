@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+
+// Services & Shared
+import { supabase } from './shared/services/supabaseClient';
+
+// Pages
 import SuiteHub from './pages/SuiteHub';
 import Login from './pages/Login';
-import KanbanDashboard from './components/KanbanDashboard';
+
+// Apps
+import KanbanDashboard from './apps/kanban/components/KanbanDashboard';
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -67,6 +73,20 @@ export default function App() {
             )
           }
         />
+
+        {/* FUTURA NUOVA APP (Es. Quiz) */}
+        {/* 
+        <Route
+          path="/apps/quiz"
+          element={
+            session ? (
+              <QuizDashboard currentUser={session.user} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        /> 
+        */}
 
         {/* REDIRECT PREDEFINITO */}
         <Route

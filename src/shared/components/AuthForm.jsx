@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../services/supabaseClient';
 
 export default function AuthForm() {
   const [authMode, setAuthMode] = useState('login');
@@ -32,11 +32,11 @@ export default function AuthForm() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white border border-slate-200 p-6 rounded-xl max-w-xs w-full shadow-sm text-xs">
         <div className="text-center mb-4">
-          <div className="w-8 h-8 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-sm mx-auto mb-2">
-            DK
+          <div className="w-8 h-8 rounded bg-slate-900 text-white flex items-center justify-center font-black text-sm mx-auto mb-2 shadow">
+            DS
           </div>
-          <h1 className="text-lg font-bold text-blue-600">Doceo Kanban</h1>
-          <p className="text-slate-400 mt-0.5">{authMode === 'login' ? 'Accedi al tuo account' : 'Crea un nuovo account'}</p>
+          <h1 className="text-lg font-black text-slate-900">Doceo Suite</h1>
+          <p className="text-slate-400 mt-0.5">{authMode === 'login' ? 'Accedi ai tuoi strumenti didattici' : 'Crea un nuovo account'}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-2 mb-3">
@@ -45,18 +45,18 @@ export default function AuthForm() {
             placeholder="Email" 
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
-            className="w-full border rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-500" 
+            className="w-full border rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-500 text-slate-900" 
           />
           <input 
             type="password" 
             placeholder="Password" 
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
-            className="w-full border rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-500" 
+            className="w-full border rounded px-2.5 py-1.5 focus:outline-none focus:border-blue-500 text-slate-900" 
           />
           {error && <p className="text-red-500 text-[10px] font-medium">{error}</p>}
           {message && <p className="text-green-600 text-[10px] font-medium">{message}</p>}
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-1.5 rounded transition">
+          <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-1.5 rounded transition">
             {authMode === 'login' ? 'Accedi' : 'Registrati'}
           </button>
         </form>

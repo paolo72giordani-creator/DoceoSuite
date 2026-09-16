@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../../../shared/services/supabaseClient';
 
 export default function ShareModal({ activeBoard, currentUserEmail, onClose }) {
   const [members, setMembers] = useState([]);

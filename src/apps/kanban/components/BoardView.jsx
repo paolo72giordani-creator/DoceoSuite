@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '../../../shared/services/supabaseClient';
 import CardDetailModal from './CardDetailModal';
-import { exportBoardToWord } from '../utils/exportBoard';
+import { exportBoardToWord } from '../../../shared/utils/exportBoard';
 import PresentationModal from './PresentationModal';
 import ReactMarkdown from 'react-markdown';
 
@@ -34,18 +34,19 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   const [modalCard, setModalCard] = useState(null);
   const [modalColId, setModalColId] = useState(null);
 
-  // Stati Drag & Drop con target visuale
+  const boardId = activeBoard?.id || activeBoard?.board_id;
+
+  // Drag & Drop State
   const [draggedCard, setDraggedCard] = useState(null);
   const [draggedColIndex, setDraggedColIndex] = useState(null);
   const [dragOverCardColId, setDragOverCardColId] = useState(null);
   const [dragOverCardId, setDragOverCardId] = useState(null);
 
-  useEffect(() => {
-    if (!activeBoard?.id) return;
-    fetchBoardData();
-  }, [activeBoard]);
+  const isDraggingRef = useRef(false);
+  const channelRef = useRef(null);
 
   const fetchBoardData = async () => {
+    if (!activeBoard?.id) return;
     try {
       const { data: cols } = await supabase
         .from('columns')
@@ -72,26 +73,81 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     }
   };
 
-  // --- SALVATAGGIO TITOLO BACHECA ---
+  // Funzione broadcast per la sincronizzazione istantanea
+  // 1. Funzione di notifica Broadcast istantanea
+  // 1. Funzione di notifica Broadcast istantanea
+  const notifyBoardUpdate = () => {
+    const targetBoardId = activeBoard?.id || activeBoard?.board_id;
+    if (!targetBoardId) return;
+
+    const targetChannel = channelRef.current || supabase.channel(`board-room-${targetBoardId}`);
+    targetChannel.send({
+      type: 'broadcast',
+      event: 'board_updated',
+      payload: { updatedBy: currentUser?.email },
+    });
+  };
+
+  // 2. Canale di ascolto Realtime
+  useEffect(() => {
+    const targetBoardId = activeBoard?.id || activeBoard?.board_id;
+    if (!targetBoardId) return;
+
+    fetchBoardData();
+
+    const channelName = `board-room-${targetBoardId}`;
+    const channel = supabase.channel(channelName, {
+      config: {
+        broadcast: { self: false },
+      },
+    });
+
+    channel
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'columns', filter: `board_id=eq.${targetBoardId}` },
+        () => {
+          if (!isDraggingRef.current) fetchBoardData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cards' },
+        () => {
+          if (!isDraggingRef.current) fetchBoardData();
+        }
+      )
+      .on('broadcast', { event: 'board_updated' }, () => {
+        if (!isDraggingRef.current) fetchBoardData();
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channelRef.current = channel;
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
+  }, [activeBoard?.id, activeBoard?.board_id]);
+
   const handleSaveBoardTitle = async () => {
     if (isViewer) {
       setIsEditingBoardTitle(false);
       return;
     }
-
     const newTitle = boardTitleInput.trim();
-
-    // Se l'input è vuoto o invariato, ripristina e chiudi
     if (!newTitle) {
       setBoardTitleInput(activeBoard?.title || '');
       setIsEditingBoardTitle(false);
       return;
     }
-
     try {
       setIsEditingBoardTitle(false);
       if (onBoardTitleChange) onBoardTitleChange(newTitle);
       await supabase.from('boards').update({ title: newTitle }).eq('id', activeBoard.id);
+      notifyBoardUpdate();
     } catch (err) {
       console.error('Errore rinomina bacheca:', err);
     }
@@ -112,6 +168,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
       if (error) throw error;
       setColumns([...columns, data[0]]);
       setNewColumnName('');
+      notifyBoardUpdate();
     } catch (err) {
       alert(err.message);
     }
@@ -127,6 +184,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
       setColumns((prev) => prev.map((c) => (c.id === columnId ? { ...c, name: updatedName } : c)));
       setEditingColId(null);
       await supabase.from('columns').update({ name: updatedName }).eq('id', columnId);
+      notifyBoardUpdate();
     } catch (err) {
       console.error('Errore rinomina colonna:', err);
     }
@@ -139,6 +197,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
       setActiveColorPickerColId(null);
       setOpenColMenuId(null);
       await supabase.from('columns').update({ color: newColor }).eq('id', columnId);
+      notifyBoardUpdate();
     } catch (err) {
       console.error('Errore cambio colore:', err);
     }
@@ -147,13 +206,13 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   const handleDeleteColumn = async (columnId) => {
     if (!columnId) return;
     if (!window.confirm("Attenzione: vuoi eliminare questa colonna e tutte le schede contenute?")) return;
-
     try {
       const colIdStr = String(columnId);
       await supabase.from('cards').delete().eq('column_id', colIdStr);
       await supabase.from('columns').delete().eq('id', colIdStr);
       setColumns((prev) => prev.filter((c) => String(c.id) !== colIdStr));
       setOpenColMenuId(null);
+      notifyBoardUpdate();
     } catch (err) {
       alert('Errore eliminazione colonna: ' + err.message);
     }
@@ -164,6 +223,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     try {
       await supabase.from('cards').delete().eq('id', cardId);
       setCards((prev) => prev.filter((c) => c.id !== cardId));
+      notifyBoardUpdate();
     } catch (err) {
       alert('Errore eliminazione scheda: ' + err.message);
     }
@@ -172,6 +232,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   // --- DRAG SCHEDE ---
   const handleCardDragStart = (e, card) => {
     if (isViewer) return;
+    isDraggingRef.current = true;
     e.stopPropagation();
     setDraggedCard(card);
     setDraggedColIndex(null);
@@ -186,6 +247,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   };
 
   const handleCardDragEnd = () => {
+    isDraggingRef.current = false;
     setDraggedCard(null);
     setDragOverCardColId(null);
     setDragOverCardId(null);
@@ -197,17 +259,17 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
     e.stopPropagation();
 
     const targetColIdStr = String(targetColumnId);
-    const sourceColIdStr = String(draggedCard.column_id);
+    const currentCard = { ...draggedCard };
 
-    if (sourceColIdStr === targetColIdStr && (!dragOverCardId || dragOverCardId === draggedCard.id)) {
-      handleCardDragEnd();
-      return;
-    }
+    // Reset immediato stato visuale di drag
+    setDraggedCard(null);
+    setDragOverCardColId(null);
+    setDragOverCardId(null);
 
-    const otherCards = cards.filter((c) => String(c.column_id) !== targetColIdStr && c.id !== draggedCard.id);
-    let targetColCards = cards.filter((c) => String(c.column_id) === targetColIdStr && c.id !== draggedCard.id);
+    const otherCards = cards.filter((c) => String(c.column_id) !== targetColIdStr && c.id !== currentCard.id);
+    let targetColCards = cards.filter((c) => String(c.column_id) === targetColIdStr && c.id !== currentCard.id);
 
-    const updatedDraggedCard = { ...draggedCard, column_id: targetColIdStr };
+    const updatedDraggedCard = { ...currentCard, column_id: targetColIdStr };
 
     if (dragOverCardId) {
       const dropIndex = targetColCards.findIndex((c) => c.id === dragOverCardId);
@@ -225,8 +287,8 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
       position: idx
     }));
 
+    // Aggiornamento ottimisitico stato locale
     setCards([...otherCards, ...reorderedTargetCards]);
-    handleCardDragEnd();
 
     try {
       const updates = reorderedTargetCards.map((card) =>
@@ -236,9 +298,12 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
           .eq('id', card.id)
       );
       await Promise.all(updates);
+      notifyBoardUpdate();
     } catch (err) {
       console.error('Errore salvataggio ordine schede:', err);
       fetchBoardData();
+    } finally {
+      isDraggingRef.current = false;
     }
   };
 
@@ -251,11 +316,9 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   const handleColDragOver = (e, index) => {
     if (isViewer || draggedCard || draggedColIndex === null || draggedColIndex === index) return;
     e.preventDefault();
-
     const reordered = [...columns];
     const [movedCol] = reordered.splice(draggedColIndex, 1);
     reordered.splice(index, 0, movedCol);
-
     setDraggedColIndex(index);
     setColumns(reordered);
   };
@@ -263,11 +326,11 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
   const handleColDragEnd = async () => {
     if (draggedColIndex === null) return;
     setDraggedColIndex(null);
-
     try {
       for (let i = 0; i < columns.length; i++) {
         await supabase.from('columns').update({ position: i }).eq('id', columns[i].id);
       }
+      notifyBoardUpdate();
     } catch (err) {
       console.error('Errore ordine colonne:', err);
     }
@@ -275,7 +338,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
 
   return (
     <div
-      className="p-4 font-sans"
+      className="p-4 font-sans min-h-screen"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleCardDragEnd}
       onClick={() => {
@@ -290,7 +353,6 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
             DS
           </div>
           <div>
-            {/* EDIT TITOLO BACHECA */}
             {!isEditingBoardTitle ? (
               <h1
                 onClick={() => {
@@ -299,10 +361,8 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                     setIsEditingBoardTitle(true);
                   }
                 }}
-                className={`text-lg font-black text-slate-900 flex items-center gap-2 ${
-                  !isViewer && activeBoard?.isOwner ? 'cursor-pointer hover:text-blue-600' : ''
-                }`}
-                title={!isViewer && activeBoard?.isOwner ? 'Clicca per rinominare' : ''}
+                className={`text-lg font-black text-slate-900 flex items-center gap-2 ${!isViewer && activeBoard?.isOwner ? 'cursor-pointer hover:text-blue-600' : ''
+                  }`}
               >
                 <span>{activeBoard?.title}</span>
                 {!isViewer && activeBoard?.isOwner && <span className="text-xs text-slate-400">✏️</span>}
@@ -325,7 +385,6 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
               />
             )}
 
-            {/* SUBTITLE CON CONDIFIONALE PER PROPRIETARIO */}
             <p className="text-xs text-slate-500 font-medium flex items-center gap-2 mt-0.5">
               <span>Utente: {currentUser?.email}</span>
               {!activeBoard?.isOwner && (
@@ -387,9 +446,8 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
               }}
               onDragEnd={handleColDragEnd}
               onDrop={(e) => handleCardDrop(e, col.id)}
-              className={`w-72 bg-slate-200/70 border rounded-2xl overflow-hidden flex-shrink-0 shadow-sm transition ${
-                isTargetCardCol ? 'border-blue-500 ring-2 ring-blue-300 bg-blue-50/30' : 'border-slate-300'
-              }`}
+              className={`w-72 bg-slate-200/70 border rounded-2xl overflow-hidden flex-shrink-0 shadow-sm transition ${isTargetCardCol ? 'border-blue-500 ring-2 ring-blue-300 bg-blue-50/30' : 'border-slate-300'
+                }`}
             >
               {/* HEADER COLONNA */}
               <div className={`p-3 font-bold text-white flex justify-between items-center relative ${col.color || 'bg-blue-600'} ${!isViewer && !isEditingThisCol ? 'cursor-grab active:cursor-grabbing' : ''}`}>
@@ -494,15 +552,16 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                 </div>
               </div>
 
-              {/* SCHEDE DELLA COLONNA CON PLACEHOLDER */}
+              {/* AREA SCHEDE COLONNA */}
               <div
-                className="p-2.5 space-y-2.5 min-h-[120px]"
+                className="p-2.5 space-y-2.5 min-h-[160px]"
                 onDragOver={(e) => {
                   if (draggedCard) {
                     e.preventDefault();
                     setDragOverCardColId(col.id);
                   }
                 }}
+                onDrop={(e) => handleCardDrop(e, col.id)}
               >
                 {colCards.map((card) => {
                   const isBeingDragged = draggedCard?.id === card.id;
@@ -525,9 +584,8 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                           setModalCard(card);
                           setModalColId(col.id);
                         }}
-                        className={`bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm hover:border-blue-400 cursor-grab active:cursor-grabbing transition relative ${
-                          isBeingDragged ? 'opacity-30 border-dashed border-blue-500 scale-95' : ''
-                        }`}
+                        className={`bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm hover:border-blue-400 cursor-grab active:cursor-grabbing transition relative ${isBeingDragged ? 'opacity-30 border-dashed border-blue-500 scale-95' : ''
+                          }`}
                       >
                         <div className="flex justify-between items-start gap-2 mb-1">
                           <h4 className="font-bold text-slate-900 text-sm">{card.title || 'Senza titolo'}</h4>
@@ -572,7 +630,7 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                   );
                 })}
 
-                {/* PLACEHOLDER "RILASCIA QUI IN FONDO" */}
+                {/* TARGET ESPLICITO DROP IN FONDO */}
                 {isTargetCardCol && draggedCard && (
                   <div
                     onDragOver={(e) => {
@@ -581,11 +639,11 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
                       setDragOverCardColId(col.id);
                       setDragOverCardId(null);
                     }}
-                    className={`border-2 border-dashed rounded-xl p-3 text-center text-xs font-bold transition-all my-1 flex items-center justify-center gap-1 ${
-                      !dragOverCardId
-                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-inner scale-[1.01]'
-                        : 'border-slate-300 text-slate-400 opacity-60'
-                    }`}
+                    onDrop={(e) => handleCardDrop(e, col.id)}
+                    className={`border-2 border-dashed rounded-xl p-3 text-center text-xs font-bold transition-all my-1 flex items-center justify-center gap-1 ${!dragOverCardId
+                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-inner scale-[1.01]'
+                      : 'border-slate-300 text-slate-400 opacity-60'
+                      }`}
                   >
                     📍 Rilascia qui in fondo
                   </div>
@@ -635,8 +693,14 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
             setModalCard(null);
             setModalColId(null);
           }}
-          onSaveCard={() => fetchBoardData()}
-          onDeleteCard={handleDeleteCard}
+          onSaveCard={() => {
+            fetchBoardData();
+            notifyBoardUpdate(); // <-- INDISPENSABILE per aggiornare l'ospite quando l'owner salva dal modal
+          }}
+          onDeleteCard={(cardId) => {
+            handleDeleteCard(cardId);
+            notifyBoardUpdate();
+          }}
         />
       )}
 
