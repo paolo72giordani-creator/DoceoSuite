@@ -707,7 +707,9 @@ export default function BoardView({ activeBoard, currentUser, onBack, onOpenShar
       {isPresenting && (
         <PresentationModal
           cards={cards}
+          columns={columns} // <--- Passare le colonne qui garantisce l'ordine perfetto!
           onClose={() => setIsPresenting(false)}
+          onEditCard={handleEditCard}
         />
       )}
     </div>

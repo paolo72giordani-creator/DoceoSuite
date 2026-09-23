@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 
 export default function PresentationModal({
   cards = [],
+  columns = [],
   onClose,
   onEditCard
 }) {
@@ -11,7 +12,38 @@ export default function PresentationModal({
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const currentCard = cards[currentIndex];
+  // 1. ORDINAMENTO RIGOROSO SEQUENZIALE (COLONNA PER COLONNA -> SCHEDA PER SCHEDA)
+  const sortedCards = useMemo(() => {
+    if (!cards || cards.length === 0) return [];
+
+    // Se non vengono passate le colonne, usa l'array di cards originale
+    if (!columns || columns.length === 0) return cards;
+
+    // Ordina le colonne in base al loro sort_order o posizione
+    const orderedColumns = [...columns].sort(
+      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
+    );
+
+    // Mappa per associare ID colonna al suo ordine visivo
+    const colOrderMap = new Map();
+    orderedColumns.forEach((col, index) => {
+      colOrderMap.set(col.id, index);
+    });
+
+    // Ordina le schede: prima per posizione colonna, poi per sort_order dentro la colonna
+    return [...cards].sort((a, b) => {
+      const colOrderA = colOrderMap.has(a.column_id) ? colOrderMap.get(a.column_id) : 999;
+      const colOrderB = colOrderMap.has(b.column_id) ? colOrderMap.get(b.column_id) : 999;
+
+      if (colOrderA !== colOrderB) {
+        return colOrderA - colOrderB;
+      }
+
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+  }, [cards, columns]);
+
+  const currentCard = sortedCards[currentIndex];
 
   // Sincronizza lo stato React quando si entra/esce dal fullscreen (anche via ESC)
   useEffect(() => {
@@ -30,9 +62,21 @@ export default function PresentationModal({
     onClose();
   };
 
+  const handleNext = () => {
+    if (currentIndex < sortedCards.length - 1) {
+      setCurrentIndex((prev) => prev + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex((prev) => prev - 1);
+    }
+  };
+
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'ArrowRight') {
+      if (e.key === 'ArrowRight' || e.key === 'Space') {
         handleNext();
       } else if (e.key === 'ArrowLeft') {
         handlePrev();
@@ -43,21 +87,9 @@ export default function PresentationModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, cards.length]);
+  }, [currentIndex, sortedCards.length]);
 
   if (!currentCard) return null;
-
-  const handleNext = () => {
-    if (currentIndex < cards.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-    }
-  };
-
-  const handlePrev = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
-    }
-  };
 
   const handleIncreaseFont = () => setFontSize((prev) => Math.min(prev + 2, 40));
   const handleDecreaseFont = () => setFontSize((prev) => Math.max(prev - 2, 14));
@@ -88,12 +120,12 @@ export default function PresentationModal({
               isDarkMode ? 'text-slate-400' : 'text-slate-600'
             }`}
           >
-            Scheda {currentIndex + 1} di {cards.length}
+            Scheda {currentIndex + 1} di {sortedCards.length}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* PULSANTE FULLSCREEN IDENTICO AL TUO SCRIPT */}
+          {/* PULSANTE FULLSCREEN */}
           <button
             type="button"
             onClick={() => {
@@ -253,7 +285,7 @@ export default function PresentationModal({
             <div className="flex flex-wrap gap-2">
               {currentCard.attachments.map((att) => (
                 <a
-                  key={att.id}
+                  key={att.id || att.file_url}
                   href={att.file_url}
                   target="_blank"
                   rel="noreferrer"
@@ -263,7 +295,7 @@ export default function PresentationModal({
                       : 'bg-slate-100 hover:bg-slate-200 text-blue-600 border-slate-200'
                   }`}
                 >
-                  📄 {att.file_name}
+                  📄 {att.file_name || 'Documento'}
                 </a>
               ))}
             </div>
@@ -312,7 +344,7 @@ export default function PresentationModal({
         <button
           type="button"
           onClick={handleNext}
-          disabled={currentIndex === cards.length - 1}
+          disabled={currentIndex === sortedCards.length - 1}
           className="bg-blue-600 hover:bg-blue-500 disabled:opacity-20 text-white font-extrabold text-sm px-6 py-2.5 rounded-2xl transition shadow-lg shadow-blue-600/30 flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed"
         >
           Successiva →
