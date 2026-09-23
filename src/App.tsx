@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 // Services & Shared
 import { supabase } from './shared/services/supabaseClient';
@@ -10,6 +10,19 @@ import Login from './pages/Login';
 
 // Apps
 import KanbanDashboard from './apps/kanban/components/KanbanDashboard';
+import TimelineDashboard from './apps/timeline/components/TimelineDashboard';
+
+// Wrapper per gestire la navigazione di ritorno dentro le app
+function TimelineAppWrapper({ currentUser, onLogout }: { currentUser: any; onLogout: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <TimelineDashboard
+      currentUser={currentUser}
+      onLogout={onLogout}
+      onNavigateBack={() => navigate('/dashboard')}
+    />
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -62,7 +75,7 @@ export default function App() {
           }
         />
 
-        {/* DOCEO KANBAN (APP DEDICATA) */}
+        {/* DOCEO KANBAN */}
         <Route
           path="/apps/kanban"
           element={
@@ -74,19 +87,17 @@ export default function App() {
           }
         />
 
-        {/* FUTURA NUOVA APP (Es. Quiz) */}
-        {/* 
+        {/* DOCEO TIMELINE */}
         <Route
-          path="/apps/quiz"
+          path="/apps/timeline"
           element={
             session ? (
-              <QuizDashboard currentUser={session.user} onLogout={handleLogout} />
+              <TimelineAppWrapper currentUser={session.user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/login" replace />
             )
           }
-        /> 
-        */}
+        />
 
         {/* REDIRECT PREDEFINITO */}
         <Route
