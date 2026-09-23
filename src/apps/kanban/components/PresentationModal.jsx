@@ -12,40 +12,52 @@ export default function PresentationModal({
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // 1. ORDINAMENTO RIGOROSO SEQUENZIALE (COLONNA PER COLONNA -> SCHEDA PER SCHEDA)
+  // 1. ARRICCHISCE ED ORDINA LE SCHEDE SEQUENZIALMENTE PER COLONNA E POSIZIONE
   const sortedCards = useMemo(() => {
     if (!cards || cards.length === 0) return [];
 
-    // Se non vengono passate le colonne, usa l'array di cards originale
-    if (!columns || columns.length === 0) return cards;
-
-    // Ordina le colonne in base al loro sort_order o posizione
+    // Mappa per un recupero rapido dei dati della colonna (titolo, colore, ordine)
+    const columnsMap = new Map();
     const orderedColumns = [...columns].sort(
       (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
     );
 
-    // Mappa per associare ID colonna al suo ordine visivo
-    const colOrderMap = new Map();
-    orderedColumns.forEach((col, index) => {
-      colOrderMap.set(col.id, index);
+    orderedColumns.forEach((col, idx) => {
+      columnsMap.set(col.id, {
+        name: col.title || col.name || 'Colonna',
+        color: col.color || col.bg_color || 'bg-blue-600',
+        order: idx
+      });
     });
 
-    // Ordina le schede: prima per posizione colonna, poi per sort_order dentro la colonna
-    return [...cards].sort((a, b) => {
-      const colOrderA = colOrderMap.has(a.column_id) ? colOrderMap.get(a.column_id) : 999;
-      const colOrderB = colOrderMap.has(b.column_id) ? colOrderMap.get(b.column_id) : 999;
+    // Mappa le schede associando nome e colore colonna
+    const enrichedCards = cards.map((card) => {
+      const colInfo = columnsMap.get(card.column_id) || {
+        name: card.columnName || card.column_name || 'Colonna',
+        color: card.columnColor || card.column_color || 'bg-blue-600',
+        order: 999
+      };
 
-      if (colOrderA !== colOrderB) {
-        return colOrderA - colOrderB;
+      return {
+        ...card,
+        columnName: colInfo.name,
+        columnColor: colInfo.color,
+        colOrder: colInfo.order
+      };
+    });
+
+    // Ordina prima per sequenza di colonna, poi per sort_order dentro la colonna
+    return enrichedCards.sort((a, b) => {
+      if (a.colOrder !== b.colOrder) {
+        return a.colOrder - b.colOrder;
       }
-
       return (a.sort_order ?? 0) - (b.sort_order ?? 0);
     });
   }, [cards, columns]);
 
   const currentCard = sortedCards[currentIndex];
 
-  // Sincronizza lo stato React quando si entra/esce dal fullscreen (anche via ESC)
+  // Sincronizza lo stato React per il fullscreen
   useEffect(() => {
     const handleChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -94,7 +106,13 @@ export default function PresentationModal({
   const handleIncreaseFont = () => setFontSize((prev) => Math.min(prev + 2, 40));
   const handleDecreaseFont = () => setFontSize((prev) => Math.max(prev - 2, 14));
 
-  const columnBgClass = currentCard.columnColor || 'bg-blue-600';
+  // Gestione classe colore per lo stile dinamico Tailwind o colore Hex
+  const columnBgStyle = currentCard.columnColor?.startsWith('#')
+    ? { backgroundColor: currentCard.columnColor }
+    : {};
+  const columnBgClass = !currentCard.columnColor?.startsWith('#')
+    ? currentCard.columnColor || 'bg-blue-600'
+    : '';
 
   return (
     <div
@@ -107,14 +125,17 @@ export default function PresentationModal({
       {/* HEADER SLIDE SHOW */}
       <div className="flex justify-between items-center max-w-5xl w-full mx-auto">
         <div className="flex items-center gap-3">
+          {/* BADGE NOME COLONNA CON BOX E COLORE */}
           {currentCard.columnName && (
             <span
+              style={columnBgStyle}
               className={`text-xs font-black px-3.5 py-1.5 rounded-full shadow-md flex items-center gap-1.5 border border-white/20 text-white ${columnBgClass}`}
             >
               <span>📋</span>
               <span className="truncate max-w-[200px] sm:max-w-xs">{currentCard.columnName}</span>
             </span>
           )}
+
           <span
             className={`text-xs font-semibold ${
               isDarkMode ? 'text-slate-400' : 'text-slate-600'
@@ -125,7 +146,7 @@ export default function PresentationModal({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* PULSANTE FULLSCREEN */}
+          {/* FULLSCREEN */}
           <button
             type="button"
             onClick={() => {
@@ -149,6 +170,7 @@ export default function PresentationModal({
             {isFullscreen ? '⤢ Riduci' : '⤢ Fullscreen'}
           </button>
 
+          {/* CAMBIO TEMA */}
           <button
             type="button"
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -162,6 +184,7 @@ export default function PresentationModal({
             {isDarkMode ? '☀️ Chiaro' : '🌙 Scuro'}
           </button>
 
+          {/* CONTROLLO FONT SIZE */}
           <div
             className={`flex items-center rounded-xl border p-0.5 ${
               isDarkMode
@@ -202,6 +225,7 @@ export default function PresentationModal({
             </button>
           </div>
 
+          {/* PULSANTE MODIFICA (SE PASSATO) */}
           {onEditCard && (
             <button
               type="button"
@@ -219,6 +243,7 @@ export default function PresentationModal({
             </button>
           )}
 
+          {/* PULSANTE CHIUDI */}
           <button
             type="button"
             onClick={handleClose}
