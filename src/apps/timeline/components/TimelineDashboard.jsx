@@ -12,15 +12,13 @@ export default function TimelineDashboard({ currentUser, onLogout, onNavigateBac
   const [newDescription, setNewDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  // Caricamento delle linee del tempo DELL'UTENTE CORRENTE
+  // Caricamento delle linee del tempo dell'utente
   const fetchTimelines = async () => {
-    if (!currentUser?.id) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('timelines')
         .select('*')
-        .eq('user_id', currentUser.id) // <--- CARICA SOLO LE TIMELINE DELL'UTENTE
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -34,7 +32,7 @@ export default function TimelineDashboard({ currentUser, onLogout, onNavigateBac
 
   useEffect(() => {
     fetchTimelines();
-  }, [currentUser]);
+  }, []);
 
   // Creazione nuova Timeline
   const handleCreateTimeline = async (e) => {
@@ -62,31 +60,6 @@ export default function TimelineDashboard({ currentUser, onLogout, onNavigateBac
       setActiveTimeline(data[0]); // Apre direttamente la timeline creata!
     } catch (err) {
       alert('Errore creazione timeline: ' + err.message);
-    }
-  };
-
-  // Eliminazione Timeline
-  const handleDeleteTimeline = async (e, timelineId, timelineTitle) => {
-    e.stopPropagation(); // Impedisce l'apertura della timeline quando si clicca sul cestino
-
-    const confirmDelete = window.confirm(
-      `Sei sicuro di voler eliminare la linea del tempo "${timelineTitle}"? L'azione rimuoverà anche tutti gli eventi associati.`
-    );
-
-    if (!confirmDelete) return;
-
-    try {
-      const { error } = await supabase
-        .from('timelines')
-        .delete()
-        .eq('id', timelineId)
-        .eq('user_id', currentUser.id);
-
-      if (error) throw error;
-
-      setTimelines((prev) => prev.filter((item) => item.id !== timelineId));
-    } catch (err) {
-      alert('Errore durante l\'eliminazione della timeline: ' + err.message);
     }
   };
 
@@ -198,22 +171,13 @@ export default function TimelineDashboard({ currentUser, onLogout, onNavigateBac
               <div
                 key={item.id}
                 onClick={() => setActiveTimeline(item)}
-                className="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between group relative"
+                className="bg-white border border-slate-200 hover:border-emerald-500 rounded-2xl p-5 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200">
                       Timeline
                     </span>
-                    {/* PULSANTE ELIMINA */}
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteTimeline(e, item.id, item.title)}
-                      className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition text-xs"
-                      title="Elimina Timeline"
-                    >
-                      🗑️
-                    </button>
                   </div>
                   <h3 className="font-black text-slate-900 text-base mb-1 group-hover:text-emerald-600 transition">
                     {item.title}
