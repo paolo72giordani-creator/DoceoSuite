@@ -50,77 +50,92 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
         fetchEvents();
     }, [activeTimeline?.id]);
 
-    // FUNZIONE ESPORTA IN WORD (.DOC) CON IMMAGINI PROPORZIONATE
-  const handleExportWord = () => {
-    if (events.length === 0) return alert('Nessun evento da esportare.');
+    // FUNZIONE DI UTILITY PER RIMUOVERE FILE DA STORAGE TRAMITE URL
+    const deleteFileFromStorage = async (publicUrl) => {
+        if (!publicUrl) return;
+        try {
+            // Estrae il path interno al bucket 'card-attachments' dall'URL pubblico
+            const urlParts = publicUrl.split('/card-attachments/');
+            if (urlParts.length > 1) {
+                const filePath = decodeURIComponent(urlParts[1]);
+                await supabase.storage.from('card-attachments').remove([filePath]);
+            }
+        } catch (err) {
+            console.error('Errore rimozione file da Storage:', err);
+        }
+    };
 
-    let content = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <title>${activeTimeline.title}</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
-          h1 { color: #059669; border-bottom: 2px solid #059669; padding-bottom: 5px; }
-          p.subtitle { color: #666; font-style: italic; margin-bottom: 30px; }
-          table.event-card { width: 100%; max-width: 650px; border: 1px solid #d1d5db; border-collapse: collapse; margin-bottom: 25px; background-color: #f9fafb; border-radius: 8px; }
-          td.card-body { padding: 16px; text-align: left; vertical-align: top; }
-          .event-date { font-weight: bold; color: #059669; font-size: 14px; margin-bottom: 6px; }
-          .event-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; color: #111827; }
-          .event-desc { font-size: 13px; line-height: 1.6; color: #374151; margin-top: 10px; margin-bottom: 12px; }
-          a.attachment-link { font-size: 12px; font-weight: bold; color: #059669; text-decoration: underline; }
-        </style>
-      </head>
-      <body>
-        <h1>${activeTimeline.title}</h1>
-        <p class="subtitle">${activeTimeline.description || ''}</p>
-    `;
+    // ESPORTA IN WORD (.DOC)
+    const handleExportWord = () => {
+        if (events.length === 0) return alert('Nessun evento da esportare.');
 
-    events.forEach((evt, idx) => {
-      content += `
-        <table class="event-card" width="100%" cellpadding="0" cellspacing="0">
-          <tr>
-            <td class="card-body">
-              <div class="event-date">📍 ${evt.date_display}</div>
-              <div class="event-title">${idx + 1}. ${evt.title}</div>
-              
-              ${
-                evt.media_url
-                  ? `<div style="text-align: center; margin: 12px 0;">
-                      <img src="${evt.media_url}" style="max-width: 100%; max-height: 350px; width: auto; height: auto; border-radius: 6px;" alt="Copertina" />
-                     </div>`
-                  : ''
-              }
-              
-              ${evt.description ? `<div class="event-desc">${evt.description}</div>` : ''}
-              
-              ${
-                evt.attachment_url
-                  ? `<div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
-                      <a href="${evt.attachment_url}" class="attachment-link" target="_blank">
-                        📎 Allegato: ${evt.attachment_name || 'Apri Documento'}
-                      </a>
-                     </div>`
-                  : ''
-              }
-            </td>
-          </tr>
-        </table>
-      `;
-    });
+        let content = `
+          <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+          <head>
+            <meta charset='utf-8'>
+            <title>${activeTimeline.title}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+              h1 { color: #059669; border-bottom: 2px solid #059669; padding-bottom: 5px; }
+              p.subtitle { color: #666; font-style: italic; margin-bottom: 30px; }
+              table.event-card { width: 100%; max-width: 650px; border: 1px solid #d1d5db; border-collapse: collapse; margin-bottom: 25px; background-color: #f9fafb; border-radius: 8px; }
+              td.card-body { padding: 16px; text-align: left; vertical-align: top; }
+              .event-date { font-weight: bold; color: #059669; font-size: 14px; margin-bottom: 6px; }
+              .event-title { font-size: 18px; font-weight: bold; margin-bottom: 12px; color: #111827; }
+              .event-desc { font-size: 13px; line-height: 1.6; color: #374151; margin-top: 10px; margin-bottom: 12px; }
+              a.attachment-link { font-size: 12px; font-weight: bold; color: #059669; text-decoration: underline; }
+            </style>
+          </head>
+          <body>
+            <h1>${activeTimeline.title}</h1>
+            <p class="subtitle">${activeTimeline.description || ''}</p>
+        `;
 
-    content += `</body></html>`;
+        events.forEach((evt, idx) => {
+            content += `
+            <table class="event-card" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td class="card-body">
+                  <div class="event-date">📍 ${evt.date_display}</div>
+                  <div class="event-title">${idx + 1}. ${evt.title}</div>
+                  
+                  ${
+                    evt.media_url
+                      ? `<div style="text-align: center; margin: 12px 0;">
+                          <img src="${evt.media_url}" style="max-width: 100%; max-height: 350px; width: auto; height: auto; border-radius: 6px;" alt="Copertina" />
+                         </div>`
+                      : ''
+                  }
+                  
+                  ${evt.description ? `<div class="event-desc">${evt.description}</div>` : ''}
+                  
+                  ${
+                    evt.attachment_url
+                      ? `<div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+                          <a href="${evt.attachment_url}" class="attachment-link" target="_blank">
+                            📎 Allegato: ${evt.attachment_name || 'Apri Documento'}
+                          </a>
+                         </div>`
+                      : ''
+                  }
+                </td>
+              </tr>
+            </table>
+          `;
+        });
 
-    const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${activeTimeline.title.replace(/\s+/g, '_')}_timeline.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+        content += `</body></html>`;
+
+        const blob = new Blob(['\ufeff', content], { type: 'application/msword' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${activeTimeline.title.replace(/\s+/g, '_')}_timeline.doc`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     // SCORRIMENTO ROLL-OVER
     const startHoverScroll = (direction) => {
@@ -165,6 +180,11 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
                 .from('card-attachments')
                 .getPublicUrl(filePath);
 
+            // Se stiamo sostituendo un'immagine esistente, rimuoviamo quella vecchia dallo storage
+            if (mediaUrl) {
+                await deleteFileFromStorage(mediaUrl);
+            }
+
             setMediaUrl(publicUrlData.publicUrl);
         } catch (err) {
             alert('Errore caricamento copertina: ' + err.message);
@@ -193,6 +213,11 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
             const { data: publicUrlData } = supabase.storage
                 .from('card-attachments')
                 .getPublicUrl(filePath);
+
+            // Se stiamo sostituendo un allegato esistente, rimuoviamo quello vecchio dallo storage
+            if (attachmentUrl) {
+                await deleteFileFromStorage(attachmentUrl);
+            }
 
             setAttachmentUrl(publicUrlData.publicUrl);
             setAttachmentName(file.name);
@@ -310,10 +335,32 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
         }
     };
 
+    // ELIMINAZIONE PULITA EVENTO E RELATIVI FILE DAL BUCKET
     const handleDeleteEvent = async (eventId) => {
-        if (!window.confirm('Eliminare questo evento?')) return;
+        if (!window.confirm('Eliminare questo evento e tutti i file allegati?')) return;
         try {
-            await supabase.from('timeline_events').delete().eq('id', eventId);
+            const eventToDelete = events.find((e) => e.id === eventId);
+
+            if (eventToDelete) {
+                // 1. Elimina eventuale immagine di copertina dallo Storage
+                if (eventToDelete.media_url) {
+                    await deleteFileFromStorage(eventToDelete.media_url);
+                }
+
+                // 2. Elimina eventuale file allegato dallo Storage
+                if (eventToDelete.attachment_url) {
+                    await deleteFileFromStorage(eventToDelete.attachment_url);
+                }
+            }
+
+            // 3. Elimina la riga dell'evento dal Database
+            const { error } = await supabase
+                .from('timeline_events')
+                .delete()
+                .eq('id', eventId);
+
+            if (error) throw error;
+
             setEvents(events.filter((e) => e.id !== eventId));
         } catch (err) {
             alert('Errore eliminazione: ' + err.message);
@@ -431,8 +478,11 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
                                             <img src={mediaUrl} alt="Preview" className="h-20 w-full object-cover rounded-xl border border-slate-700" />
                                             <button
                                                 type="button"
-                                                onClick={() => setMediaUrl('')}
-                                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center font-bold"
+                                                onClick={async () => {
+                                                    await deleteFileFromStorage(mediaUrl);
+                                                    setMediaUrl('');
+                                                }}
+                                                className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-5 h-5 text-[10px] flex items-center justify-center font-bold cursor-pointer"
                                             >
                                                 ✕
                                             </button>
@@ -457,11 +507,12 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
                                             <span className="truncate max-w-[200px] text-slate-300 font-medium">📄 {attachmentName || 'Allegato'}</span>
                                             <button
                                                 type="button"
-                                                onClick={() => {
+                                                onClick={async () => {
+                                                    await deleteFileFromStorage(attachmentUrl);
                                                     setAttachmentUrl('');
                                                     setAttachmentName('');
                                                 }}
-                                                className="text-red-400 font-bold text-xs hover:text-red-300 px-2"
+                                                className="text-red-400 font-bold text-xs hover:text-red-300 px-2 cursor-pointer"
                                             >
                                                 ✕
                                             </button>
@@ -473,14 +524,14 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
                                     <button
                                         type="button"
                                         onClick={() => setIsModalOpen(false)}
-                                        className="px-4 py-2 rounded-xl bg-slate-700 text-xs font-bold"
+                                        className="px-4 py-2 rounded-xl bg-slate-700 text-xs font-bold cursor-pointer"
                                     >
                                         Annulla
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={uploadingCover || uploadingAttachment}
-                                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold"
+                                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold cursor-pointer"
                                     >
                                         Salva Evento
                                     </button>
@@ -498,7 +549,7 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
                         <h3 className="text-base font-bold text-slate-300 mb-1">Nessun evento</h3>
                         <button
                             onClick={handleOpenCreateModal}
-                            className="mt-4 bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs"
+                            className="mt-4 bg-emerald-600 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
                         >
                             + Aggiungi Primo Evento
                         </button>
@@ -571,7 +622,7 @@ export default function TimelineView({ activeTimeline, currentUser, onBack }) {
                                                             e.stopPropagation();
                                                             handleDeleteEvent(evt.id);
                                                         }}
-                                                        className="text-slate-500 hover:text-red-400 text-xs transition"
+                                                        className="text-slate-500 hover:text-red-400 text-xs transition cursor-pointer"
                                                     >
                                                         🗑️
                                                     </button>

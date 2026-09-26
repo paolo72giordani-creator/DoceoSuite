@@ -198,7 +198,7 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
+        <div className="min-h-screen bg-slate-50 p-6 font-sans flex flex-col">
             {activeBoard ? (
                 <>
                     <BoardView
@@ -225,24 +225,19 @@ export default function KanbanDashboard({ currentUser, onLogout }: KanbanDashboa
                     )}
                 </>
             ) : (
-                <div className="max-w-6xl w-full mx-auto px-6 py-8 flex-1">
-                    <div className="mb-4 flex justify-between items-center">
-                        <button
-                            onClick={() => navigate('/dashboard')}
-                            className="text-xs font-bold text-slate-600 hover:text-blue-600 transition flex items-center gap-1.5 cursor-pointer"
-                        >
-                            <span>←</span> Torna a Doceo Suite
-                        </button>
-                    </div>
-
-                    <Header currentUser={currentUser} onLogout={onLogout} />
+                <div className="max-w-6xl w-full mx-auto flex-1">
+                    <Header 
+                        currentUser={currentUser} 
+                        onLogout={onLogout} 
+                        onNavigateHome={() => navigate('/dashboard')}
+                    />
 
                     {loading ? (
                         <div className="text-center py-12 text-slate-500 font-bold text-xs">
                             Caricamento bacheche...
                         </div>
                     ) : (
-                        <div className="space-y-10 mt-6">
+                        <div className="space-y-10 my-6">
                             <section>
                                 <div className="flex items-center gap-2 mb-4">
                                     <h2 className="text-xl font-black text-slate-900">Le mie bacheche</h2>
