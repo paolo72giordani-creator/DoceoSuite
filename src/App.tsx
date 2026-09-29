@@ -11,12 +11,25 @@ import Login from './pages/Login';
 // Apps
 import KanbanDashboard from './apps/kanban/components/KanbanDashboard';
 import TimelineDashboard from './apps/timeline/components/TimelineDashboard';
+import DilemmaDashboard from './apps/dilemma/components/DilemmaDashboard';
 
-// Wrapper per gestire la navigazione di ritorno dentro le app
+// Wrapper per gestire la navigazione dentro Timeline
 function TimelineAppWrapper({ currentUser, onLogout }: { currentUser: any; onLogout: () => void }) {
   const navigate = useNavigate();
   return (
     <TimelineDashboard
+      currentUser={currentUser}
+      onLogout={onLogout}
+      onNavigateBack={() => navigate('/dashboard')}
+    />
+  );
+}
+
+// Wrapper per gestire la navigazione dentro Dilemma
+function DilemmaAppWrapper({ currentUser, onLogout }: { currentUser: any; onLogout: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <DilemmaDashboard
       currentUser={currentUser}
       onLogout={onLogout}
       onNavigateBack={() => navigate('/dashboard')}
@@ -93,6 +106,18 @@ export default function App() {
           element={
             session ? (
               <TimelineAppWrapper currentUser={session.user} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        {/* DOCEO DILEMMA */}
+        <Route
+          path="/apps/dilemma"
+          element={
+            session ? (
+              <DilemmaAppWrapper currentUser={session.user} onLogout={handleLogout} />
             ) : (
               <Navigate to="/login" replace />
             )
