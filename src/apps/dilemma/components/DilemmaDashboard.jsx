@@ -291,19 +291,36 @@ export default function DilemmaDashboard({ currentUser, onLogout, onNavigateBack
     }
   };
 
-  // Switch Visibilità Pubblica/Privata
+  // Switch Visibilità Pubblica/Privata con aggiornamento in tempo reale del contatore Community
   const togglePublic = async (e, dilemma) => {
     e.stopPropagation();
+    const newPublicState = !dilemma.is_public;
+
     try {
       const { error } = await supabase
         .from('dilemmas')
-        .update({ is_public: !dilemma.is_public })
+        .update({ is_public: newPublicState })
         .eq('id', dilemma.id)
         .eq('user_id', currentUser.id);
 
       if (error) throw error;
 
-      setDilemmas(dilemmas.map(d => d.id === dilemma.id ? { ...d, is_public: !d.is_public } : d));
+      const updatedDilemma = { ...dilemma, is_public: newPublicState };
+
+      // 1. Aggiorna lo stato dei miei dilemmi
+      setDilemmas(dilemmas.map(d => d.id === dilemma.id ? updatedDilemma : d));
+
+      // 2. Aggiorna istantaneamente lo stato della Galleria Community
+      if (newPublicState) {
+        // Se è diventato pubblico, lo aggiungiamo alla lista community se non c'era già
+        setPublicDilemmas(prev => {
+          if (prev.some(p => p.id === dilemma.id)) return prev;
+          return [updatedDilemma, ...prev];
+        });
+      } else {
+        // Se è diventato privato, lo rimuoviamo dalla lista community
+        setPublicDilemmas(prev => prev.filter(p => p.id !== dilemma.id));
+      }
     } catch (err) {
       alert('Errore modifica visibilità: ' + err.message);
     }
@@ -602,7 +619,7 @@ export default function DilemmaDashboard({ currentUser, onLogout, onNavigateBack
                       <span className="text-2xl">{item.icon || '🔀'}</span>
                       <div className="flex items-center gap-1.5">
 
-                        {/* SELETTORE PUBBLICO / PRIVATO INTUITIVO */}
+                        {/* SELETTORE VISIVO CHIARO: VIOLA SE ATTIVO, GRIGIO SBIADITO SE INATTIVO */}
                         <div className="bg-slate-100 p-0.5 rounded-lg flex items-center gap-0.5 border border-slate-200 text-[10px] font-bold">
                           <button
                             type="button"
@@ -610,7 +627,9 @@ export default function DilemmaDashboard({ currentUser, onLogout, onNavigateBack
                               e.stopPropagation();
                               if (item.is_public) togglePublic(e, item);
                             }}
-                            className={`px-2 py-0.5 rounded-md transition cursor-pointer ${!item.is_public ? 'bg-white text-slate-800 shadow-sm font-extrabold' : 'text-slate-400 hover:text-slate-600'
+                            className={`px-2 py-0.5 rounded-md transition cursor-pointer ${!item.is_public
+                                ? 'bg-purple-600 text-white shadow-sm font-black'
+                                : 'text-slate-400 hover:text-slate-600'
                               }`}
                             title="Rendi privato"
                           >
@@ -622,7 +641,9 @@ export default function DilemmaDashboard({ currentUser, onLogout, onNavigateBack
                               e.stopPropagation();
                               if (!item.is_public) togglePublic(e, item);
                             }}
-                            className={`px-2 py-0.5 rounded-md transition cursor-pointer ${item.is_public ? 'bg-purple-600 text-white shadow-sm font-extrabold' : 'text-slate-400 hover:text-slate-600'
+                            className={`px-2 py-0.5 rounded-md transition cursor-pointer ${item.is_public
+                                ? 'bg-purple-600 text-white shadow-sm font-black'
+                                : 'text-slate-400 hover:text-slate-600'
                               }`}
                             title="Condividi nella Community"
                           >
