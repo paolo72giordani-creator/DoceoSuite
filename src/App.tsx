@@ -14,7 +14,7 @@ import KanbanDashboard from './apps/kanban/components/KanbanDashboard';
 import TimelineDashboard from './apps/timeline/components/TimelineDashboard';
 import DilemmaDashboard from './apps/dilemma/components/DilemmaDashboard';
 
-// Wrapper per gestire la navigazione dentro Timeline
+// Wrapper per Timeline
 function TimelineAppWrapper({ currentUser, onLogout }: { currentUser: any; onLogout: () => void }) {
   const navigate = useNavigate();
   return (
@@ -26,7 +26,7 @@ function TimelineAppWrapper({ currentUser, onLogout }: { currentUser: any; onLog
   );
 }
 
-// Wrapper per gestire la navigazione dentro Dilemma
+// Wrapper per Dilemma
 function DilemmaAppWrapper({ currentUser, onLogout }: { currentUser: any; onLogout: () => void }) {
   const navigate = useNavigate();
   return (
@@ -38,7 +38,7 @@ function DilemmaAppWrapper({ currentUser, onLogout }: { currentUser: any; onLogo
   );
 }
 
-// Wrapper per gestire i pulsanti della LandingPage verso il login
+// Wrapper per i pulsanti della LandingPage
 function LandingPageWrapper() {
   const navigate = useNavigate();
   return (
@@ -46,6 +46,86 @@ function LandingPageWrapper() {
       onGoToLogin={() => navigate('/login')}
       onGoToRegister={() => navigate('/login')}
     />
+  );
+}
+
+// Componente interno che gestisce le rotte e il redirect del logout
+function AppRoutes({ session }: { session: any }) {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/', { replace: true });
+  };
+
+  return (
+    <Routes>
+      {/* LANDING PAGE PUBBLICA */}
+      <Route
+        path="/"
+        element={!session ? <LandingPageWrapper /> : <Navigate to="/dashboard" replace />}
+      />
+
+      {/* LOGIN */}
+      <Route
+        path="/login"
+        element={!session ? <Login /> : <Navigate to="/dashboard" replace />}
+      />
+
+      {/* SUITE HUB */}
+      <Route
+        path="/dashboard"
+        element={
+          session ? (
+            <SuiteHub currentUser={session.user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+
+      {/* DOCEO KANBAN */}
+      <Route
+        path="/apps/kanban"
+        element={
+          session ? (
+            <KanbanDashboard currentUser={session.user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+
+      {/* DOCEO TIMELINE */}
+      <Route
+        path="/apps/timeline"
+        element={
+          session ? (
+            <TimelineAppWrapper currentUser={session.user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+
+      {/* DOCEO DILEMMA */}
+      <Route
+        path="/apps/dilemma"
+        element={
+          session ? (
+            <DilemmaAppWrapper currentUser={session.user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        }
+      />
+
+      {/* FALLBACK: Rotte inesistenti rimandano a "/" se non loggato o a "/dashboard" se loggato */}
+      <Route
+        path="*"
+        element={<Navigate to={session ? "/dashboard" : "/"} replace />}
+      />
+    </Routes>
   );
 }
 
@@ -67,10 +147,6 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -81,73 +157,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        {/* LANDING PAGE PUBBLICA */}
-        <Route
-          path="/"
-          element={!session ? <LandingPageWrapper /> : <Navigate to="/dashboard" replace />}
-        />
-
-        {/* LOGIN */}
-        <Route
-          path="/login"
-          element={!session ? <Login /> : <Navigate to="/dashboard" replace />}
-        />
-
-        {/* SUITE HUB (DASHBOARD PRINCIPALE) */}
-        <Route
-          path="/dashboard"
-          element={
-            session ? (
-              <SuiteHub currentUser={session.user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        {/* DOCEO KANBAN */}
-        <Route
-          path="/apps/kanban"
-          element={
-            session ? (
-              <KanbanDashboard currentUser={session.user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        {/* DOCEO TIMELINE */}
-        <Route
-          path="/apps/timeline"
-          element={
-            session ? (
-              <TimelineAppWrapper currentUser={session.user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        {/* DOCEO DILEMMA */}
-        <Route
-          path="/apps/dilemma"
-          element={
-            session ? (
-              <DilemmaAppWrapper currentUser={session.user} onLogout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
-        />
-
-        {/* REDIRECT ROTTE NON VALIDE */}
-        <Route
-          path="*"
-          element={<Navigate to={session ? "/dashboard" : "/"} replace />}
-        />
-      </Routes>
+      <AppRoutes session={session} />
     </BrowserRouter>
   );
 }
