@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 
 // Services & Shared
 import { supabase } from './shared/services/supabaseClient';
+import LandingPage from './shared/components/LandingPage';
 
 // Pages
 import SuiteHub from './pages/SuiteHub';
@@ -33,6 +34,17 @@ function DilemmaAppWrapper({ currentUser, onLogout }: { currentUser: any; onLogo
       currentUser={currentUser}
       onLogout={onLogout}
       onNavigateBack={() => navigate('/dashboard')}
+    />
+  );
+}
+
+// Wrapper per gestire i pulsanti della LandingPage verso il login
+function LandingPageWrapper() {
+  const navigate = useNavigate();
+  return (
+    <LandingPage
+      onGoToLogin={() => navigate('/login')}
+      onGoToRegister={() => navigate('/login')}
     />
   );
 }
@@ -70,13 +82,19 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* LANDING PAGE PUBBLICA */}
+        <Route
+          path="/"
+          element={!session ? <LandingPageWrapper /> : <Navigate to="/dashboard" replace />}
+        />
+
         {/* LOGIN */}
         <Route
           path="/login"
           element={!session ? <Login /> : <Navigate to="/dashboard" replace />}
         />
 
-        {/* SUITE HUB (DASHBOARD PRINCIPALE SUITE) */}
+        {/* SUITE HUB (DASHBOARD PRINCIPALE) */}
         <Route
           path="/dashboard"
           element={
@@ -124,10 +142,10 @@ export default function App() {
           }
         />
 
-        {/* REDIRECT PREDEFINITO */}
+        {/* REDIRECT ROTTE NON VALIDE */}
         <Route
           path="*"
-          element={<Navigate to={session ? "/dashboard" : "/login"} replace />}
+          element={<Navigate to={session ? "/dashboard" : "/"} replace />}
         />
       </Routes>
     </BrowserRouter>
